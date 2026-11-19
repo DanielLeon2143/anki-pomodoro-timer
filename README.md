@@ -15,6 +15,9 @@ An Anki add-on that adds a Pomodoro timer plus focus tools for reviewing.
 - **Lock me into the deck**: blocks going back to the Decks screen, the deck overview or
   switching decks until the deck's due cards are finished.
 - Auto-reveal and auto-answer pause during breaks and while the Pomodoro is paused.
+- **Languages**: English, Español, Português, Français, Deutsch, 简体中文, 繁體中文, 日本語, 한국어.
+  Follows Anki's language automatically (then the system language); can be set in Settings > Language.
+  Translations live in [i18n.py](i18n.py).
 
 All options are in the timer window under **Focus Options**; see [config.md](config.md) for the
 config keys.
@@ -22,7 +25,7 @@ config keys.
 ## Install
 
 Copy this folder into Anki's add-ons folder (Tools > Add-ons > View Files), or zip
-`__init__.py`, `manifest.json`, `config.json` and `config.md` into a `.ankiaddon` file and
+`__init__.py`, `i18n.py`, `manifest.json`, `config.json` and `config.md` into a `.ankiaddon` file and
 install it from Tools > Add-ons > Install from file. Restart Anki afterwards.
 
 Requires Anki 2.1.50 or newer.

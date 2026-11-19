@@ -31,6 +31,8 @@ from aqt.qt import (
 )
 from aqt.utils import tooltip
 
+from .i18n import LANGUAGE_NAMES, set_language, tr
+
 ADDON = __name__
 
 DEFAULTS = {
@@ -52,15 +54,23 @@ DEFAULTS = {
     "studying_seconds": 10,
     "lock_in_deck": False,
     "extend_time_key": "H",
+    "language": "auto",
     "focus_color": "#e74c3c",
     "short_break_color": "#27ae60",
     "long_break_color": "#2980b9",
 }
 
 WORK, SHORT, LONG = "work", "short", "long"
-LABELS = {WORK: "Focus", SHORT: "Short Break", LONG: "Long Break"}
 COLOR_KEYS = {WORK: "focus_color", SHORT: "short_break_color", LONG: "long_break_color"}
-ACTIONS = {"again": "Again", "bury": "Bury"}
+ACTIONS = ("again", "bury")
+
+
+def phase_label(phase):
+    return tr({WORK: "phase_work", SHORT: "phase_short", LONG: "phase_long"}[phase])
+
+
+def action_label(action):
+    return tr("action_bury" if action == "bury" else "action_again")
 
 # Shortcuts Anki itself uses in the reviewer / main window (lower-cased
 # QKeySequence strings), used to warn about clashes with the add-time hotkey.
@@ -96,7 +106,7 @@ class BottomBar(QProgressBar):
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setFixedHeight(16)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setToolTip("Click to open the Pomodoro Timer")
+        self.setToolTip(tr("bar_tooltip"))
         self.hide()
 
     def update_state(self, phase, remaining, total, running, visible, color):
@@ -107,12 +117,12 @@ class BottomBar(QProgressBar):
         if running:
             status = ""
         elif remaining == total:
-            status = "  –  click for options"
+            status = "  –  " + tr("bar_click")
         else:
-            status = "  (paused)"
+            status = f"  ({tr('bar_paused')})"
         self.setMaximum(total or 1)
         self.setValue((total or 1) - remaining)
-        self.setFormat(f"{LABELS[phase]}  {m:02d}:{s:02d}{status}")
+        self.setFormat(f"{phase_label(phase)}  {m:02d}:{s:02d}{status}")
         self.setStyleSheet(
             "QProgressBar { border: none; background: rgba(128,128,128,0.25);"
             " color: palette(text); font-size: 11px; }"
@@ -138,7 +148,7 @@ def get_bottom_bar():
 class PomodoroDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Pomodoro Timer")
+        self.setWindowTitle(tr("title"))
         self.conf = get_config()
 
         self.phase = WORK
@@ -188,39 +198,39 @@ class PomodoroDialog(QDialog):
         layout.addWidget(self.session_label)
 
         buttons = QHBoxLayout()
-        self.start_btn = QPushButton("Start")
+        self.start_btn = QPushButton(tr("start"))
         self.start_btn.clicked.connect(self.toggle)
-        reset_btn = QPushButton("Reset")
+        reset_btn = QPushButton(tr("reset"))
         reset_btn.clicked.connect(self.reset)
-        skip_btn = QPushButton("Skip")
+        skip_btn = QPushButton(tr("skip"))
         skip_btn.clicked.connect(self.skip)
         for b in (self.start_btn, reset_btn, skip_btn):
             buttons.addWidget(b)
         layout.addLayout(buttons)
 
         # Settings
-        box = QGroupBox("Settings")
+        box = QGroupBox(tr("settings"))
         form = QFormLayout(box)
 
-        self.work_spin = self._spin(1, 180, self.conf["work_minutes"], " min")
-        self.short_spin = self._spin(1, 60, self.conf["short_break_minutes"], " min")
-        self.long_spin = self._spin(1, 120, self.conf["long_break_minutes"], " min")
+        self.work_spin = self._spin(1, 180, self.conf["work_minutes"], tr("unit_min"))
+        self.short_spin = self._spin(1, 60, self.conf["short_break_minutes"], tr("unit_min"))
+        self.long_spin = self._spin(1, 120, self.conf["long_break_minutes"], tr("unit_min"))
         self.sessions_spin = self._spin(1, 12, self.conf["sessions_before_long_break"], "")
 
-        form.addRow("Focus:", self.work_spin)
-        form.addRow("Short break:", self.short_spin)
-        form.addRow("Long break:", self.long_spin)
-        form.addRow("Long break every:", self.sessions_spin)
+        form.addRow(tr("focus_len"), self.work_spin)
+        form.addRow(tr("short_len"), self.short_spin)
+        form.addRow(tr("long_len"), self.long_spin)
+        form.addRow(tr("long_every"), self.sessions_spin)
 
-        self.auto_cb = QCheckBox("Auto-start next phase")
+        self.auto_cb = QCheckBox(tr("auto_next"))
         self.auto_cb.setChecked(self.conf["auto_start_next"])
-        self.top_cb = QCheckBox("Always on top")
+        self.top_cb = QCheckBox(tr("on_top"))
         self.top_cb.setChecked(self.conf["always_on_top"])
-        self.sound_cb = QCheckBox("Beep when phase ends")
+        self.sound_cb = QCheckBox(tr("beep"))
         self.sound_cb.setChecked(self.conf["sound"])
-        self.bar_cb = QCheckBox("Show progress bar at bottom of Anki")
+        self.bar_cb = QCheckBox(tr("show_bar"))
         self.bar_cb.setChecked(self.conf["show_bottom_bar"])
-        self.review_cb = QCheckBox("Start timer automatically when studying a deck")
+        self.review_cb = QCheckBox(tr("auto_review"))
         self.review_cb.setChecked(self.conf["auto_start_on_review"])
         for cb in (self.review_cb, self.auto_cb, self.top_cb, self.sound_cb, self.bar_cb):
             form.addRow(cb)
@@ -233,46 +243,53 @@ class PomodoroDialog(QDialog):
             btn.setFixedWidth(80)
             btn.clicked.connect(lambda _=False, p=phase: self._pick_color(p))
             self.color_btns[phase] = btn
-            form.addRow(f"{LABELS[phase]} colour:", btn)
+            form.addRow(tr("colour", phase=phase_label(phase)), btn)
         self._update_color_buttons()
 
         for s in (self.work_spin, self.short_spin, self.long_spin, self.sessions_spin):
             s.valueChanged.connect(self._settings_changed)
 
+        # Language: automatic (Anki / system) or a fixed one.
+        self.lang_combo = QComboBox()
+        self.lang_combo.addItem(tr("lang_auto"), "auto")
+        for code, name in LANGUAGE_NAMES.items():
+            self.lang_combo.addItem(name, code)
+        idx = self.lang_combo.findData(self.conf["language"])
+        self.lang_combo.setCurrentIndex(max(idx, 0))
+        self.lang_combo.setToolTip(tr("lang_restart"))
+        self.lang_combo.currentIndexChanged.connect(self._language_changed)
+        form.addRow(tr("language"), self.lang_combo)
+
         layout.addWidget(box)
 
         # Focus Options
-        focus_box = QGroupBox("Focus Options")
+        focus_box = QGroupBox(tr("focus_options"))
         fform = QFormLayout(focus_box)
 
-        self.reveal_cb = QCheckBox("Auto-reveal answer after:")
+        self.reveal_cb = QCheckBox(tr("reveal_after"))
         self.reveal_cb.setChecked(self.conf["auto_reveal"])
-        self.reveal_spin = self._spin(1, 600, self.conf["auto_reveal_seconds"], " sec")
+        self.reveal_spin = self._spin(1, 600, self.conf["auto_reveal_seconds"], tr("unit_sec"))
         fform.addRow(self.reveal_cb, self.reveal_spin)
 
-        self.action_cb = QCheckBox("Then auto-answer after:")
+        self.action_cb = QCheckBox(tr("answer_after"))
         self.action_cb.setChecked(self.conf["auto_action"])
-        self.action_spin = self._spin(1, 600, self.conf["auto_action_seconds"], " sec")
+        self.action_spin = self._spin(1, 600, self.conf["auto_action_seconds"], tr("unit_sec"))
         fform.addRow(self.action_cb, self.action_spin)
 
         self.action_combo = QComboBox()
-        for key, label in ACTIONS.items():
-            self.action_combo.addItem(label, key)
+        for key in ACTIONS:
+            self.action_combo.addItem(action_label(key), key)
         idx = self.action_combo.findData(self.conf["auto_action_type"])
         self.action_combo.setCurrentIndex(max(idx, 0))
-        fform.addRow("Mark card as:", self.action_combo)
+        fform.addRow(tr("mark_as"), self.action_combo)
 
-        self.tip_spin = self._spin(1, 120, self.conf["tip_of_tongue_seconds"], " sec")
-        self.tip_spin.setToolTip(
-            "Extra time added by the 'Tip of my tongue' button before the answer is revealed."
-        )
-        fform.addRow("'Tip of my tongue' adds:", self.tip_spin)
+        self.tip_spin = self._spin(1, 120, self.conf["tip_of_tongue_seconds"], tr("unit_sec"))
+        self.tip_spin.setToolTip(tr("tip_tooltip"))
+        fform.addRow(tr("tip_adds"), self.tip_spin)
 
-        self.study_spin = self._spin(1, 300, self.conf["studying_seconds"], " sec")
-        self.study_spin.setToolTip(
-            "Extra time added by the 'Studying' button before the card is auto-answered."
-        )
-        fform.addRow("'Studying' adds:", self.study_spin)
+        self.study_spin = self._spin(1, 300, self.conf["studying_seconds"], tr("unit_sec"))
+        self.study_spin.setToolTip(tr("study_tooltip"))
+        fform.addRow(tr("study_adds"), self.study_spin)
 
         for cb in (self.reveal_cb, self.action_cb):
             cb.toggled.connect(self._settings_changed)
@@ -280,11 +297,8 @@ class PomodoroDialog(QDialog):
             s.valueChanged.connect(self._settings_changed)
         self.action_combo.currentIndexChanged.connect(self._settings_changed)
 
-        self.lock_cb = QCheckBox("Lock me into the deck until it's finished")
-        self.lock_cb.setToolTip(
-            "While studying, block going back to the Decks screen, the deck overview\n"
-            "or switching decks. Finishing the deck's due cards unlocks it."
-        )
+        self.lock_cb = QCheckBox(tr("lock"))
+        self.lock_cb.setToolTip(tr("lock_tooltip"))
         self.lock_cb.setChecked(self.conf["lock_in_deck"])
         self.lock_cb.toggled.connect(self._settings_changed)
         fform.addRow(self.lock_cb)
@@ -292,14 +306,10 @@ class PomodoroDialog(QDialog):
         self.key_edit = QKeySequenceEdit(QKeySequence(self.conf["extend_time_key"] or ""))
         if hasattr(self.key_edit, "setMaximumSequenceLength"):
             self.key_edit.setMaximumSequenceLength(1)
-        self.key_edit.setToolTip(
-            "Shortcut for the 'Tip of my tongue' / 'Studying' button while reviewing.\n"
-            "Click and press a key. Avoid keys Anki already uses (e.g. E, R, U, V, 1-4).\n"
-            "Takes effect the next time you start studying a deck."
-        )
+        self.key_edit.setToolTip(tr("hotkey_tooltip"))
         self.key_edit.keySequenceChanged.connect(self._settings_changed)
         self.key_edit.keySequenceChanged.connect(self._update_key_note)
-        fform.addRow("Add-time hotkey:", self.key_edit)
+        fform.addRow(tr("hotkey"), self.key_edit)
 
         self.key_note = QLabel()
         self.key_note.setWordWrap(True)
@@ -312,23 +322,25 @@ class PomodoroDialog(QDialog):
     def _update_key_note(self, *_):
         key = self.key_edit.keySequence().toString()
         if key and key.lower() in ANKI_KEYS:
-            self.key_note.setText(
-                f"<b>{key}</b> is already used by Anki. If two things share a key, "
-                "neither of them works. Pick a different key."
-            )
+            self.key_note.setText(tr("key_clash", key=key))
             self.key_note.setStyleSheet("color: #e74c3c; font-size: 11px;")
         else:
-            self.key_note.setText(
-                "Don't pick a key Anki already uses, such as E, R, U, V or 1-4. "
-                "If two things share a key, neither of them works. "
-                "A new key takes effect the next time you start studying a deck."
-            )
+            self.key_note.setText(tr("key_note"))
             self.key_note.setStyleSheet("color: gray; font-size: 11px;")
+
+    def _language_changed(self, *_):
+        self.conf["language"] = self.lang_combo.currentData()
+        save_config(self.conf)
+        set_language(self.conf["language"])
+        # Labels built on the fly (bottom bar, buttons, messages) switch now;
+        # the rest of this window switches after a restart.
+        self._refresh()
+        tooltip(tr("lang_restart"), period=4000, parent=self)
 
     def _pick_color(self, phase):
         key = COLOR_KEYS[phase]
         color = QColorDialog.getColor(
-            QColor(self.conf[key]), self, f"{LABELS[phase]} colour"
+            QColor(self.conf[key]), self, tr("colour_title", phase=phase_label(phase))
         )
         if color.isValid():
             self.conf[key] = color.name()
@@ -427,7 +439,7 @@ class PomodoroDialog(QDialog):
         self.running = True
         self.paused = False
         self._refresh()
-        tooltip(f"Pomodoro started: {LABELS[self.phase]}", parent=mw)
+        tooltip(tr("started", phase=phase_label(self.phase)), parent=mw)
 
     def reset(self):
         self.timer.stop()
@@ -463,11 +475,7 @@ class PomodoroDialog(QDialog):
         if notify:
             if self.conf["sound"]:
                 QApplication.beep()
-            msg = (
-                "Focus session done! Time for a break."
-                if finished == WORK
-                else "Break over. Back to studying!"
-            )
+            msg = tr("focus_done") if finished == WORK else tr("break_over")
             tooltip(msg, period=5000, parent=mw)
             self.raise_()
             self.activateWindow()
@@ -484,7 +492,7 @@ class PomodoroDialog(QDialog):
         m, s = divmod(max(self.remaining, 0), 60)
         self.time_label.setText(f"{m:02d}:{s:02d}")
         color = self.conf[COLOR_KEYS[self.phase]]
-        self.phase_label.setText(LABELS[self.phase])
+        self.phase_label.setText(phase_label(self.phase))
         self.phase_label.setStyleSheet(f"color: {color};")
         self.time_label.setStyleSheet(f"color: {color};")
 
@@ -499,11 +507,11 @@ class PomodoroDialog(QDialog):
         in_cycle = self.completed_work % n
         dots = "●" * in_cycle + "○" * (n - in_cycle)
         self.session_label.setText(
-            f"{dots}   Completed today: {self.completed_work}"
+            f"{dots}   " + tr("completed", n=self.completed_work)
         )
 
-        self.start_btn.setText("Pause" if self.running else "Start")
-        title = f"{m:02d}:{s:02d} – {LABELS[self.phase]}" if self.running else "Pomodoro Timer"
+        self.start_btn.setText(tr("pause") if self.running else tr("start"))
+        title = f"{m:02d}:{s:02d} – {phase_label(self.phase)}" if self.running else tr("title")
         self.setWindowTitle(title)
 
         get_bottom_bar().update_state(
@@ -556,7 +564,9 @@ def show_pomodoro():
     _dialog.activateWindow()
 
 
-action = QAction("Pomodoro Timer", mw)
+set_language(get_config().get("language", "auto"))
+
+action = QAction(tr("title"), mw)
 action.setShortcut(QKeySequence("Ctrl+Shift+P"))
 action.triggered.connect(show_pomodoro)
 mw.form.menuTools.addAction(action)
@@ -581,9 +591,9 @@ _card_timer_target = None  # (card id, "question" | "answer")
 
 # Bottom-bar button that buys more time on the current card.
 EXTEND_INFO = {
-    # side: (button label, config key, countdown text)
-    "question": ("Tip of my tongue", "tip_of_tongue_seconds", "Reveal in"),
-    "answer": ("Studying", "studying_seconds", "{action} in"),
+    # side: (button label key, config key, countdown text key)
+    "question": ("tip_btn", "tip_of_tongue_seconds", "reveal_in"),
+    "answer": ("study_btn", "studying_seconds", "action_in"),
 }
 
 # Injected into the reviewer's bottom bar. The widget floats (position: fixed)
@@ -679,16 +689,17 @@ def _bottom_eval(call):
 
 
 def _show_extend_button(side):
-    label, key, prefix = EXTEND_INFO[side]
+    label_key, key, prefix_key = EXTEND_INFO[side]
     conf = get_dialog().conf
     extra = int(conf[key])
-    prefix = prefix.format(action=ACTIONS.get(conf["auto_action_type"], "Again"))
+    label = tr(label_key)
+    prefix = tr(prefix_key, action=action_label(conf["auto_action_type"]))
     args = ", ".join(
         json.dumps(v)
         for v in (
             f"{label} +{extra}s",
-            f"Add {extra} more seconds"
-            + (f" (shortcut: {conf['extend_time_key']})" if conf.get("extend_time_key") else ""),
+            tr("add_secs", n=extra)
+            + (tr("shortcut", key=conf["extend_time_key"]) if conf.get("extend_time_key") else ""),
             prefix,
             max(_card_timer.remainingTime(), 0),
         )
@@ -750,10 +761,10 @@ def _on_card_timer():
             r.bury_current_card()
         else:
             r.onBuryCard()
-        tooltip("Card buried (time ran out)", parent=mw)
+        tooltip(tr("buried"), parent=mw)
     else:
         r._answerCard(1)
-        tooltip("Marked Again (time ran out)", parent=mw)
+        tooltip(tr("marked_again"), parent=mw)
 
 
 _card_timer.timeout.connect(_on_card_timer)
@@ -777,10 +788,7 @@ def on_show_answer(card):
         _stop_card_timer()
 
 
-HOLD_MESSAGES = {
-    "break": "Break time: auto-reveal and auto-answer paused",
-    "paused": "Pomodoro paused: auto-reveal and auto-answer paused",
-}
+HOLD_MESSAGES = {"break": "hold_break", "paused": "hold_paused"}
 
 
 def _on_hold_changed(reason, old_reason):
@@ -794,7 +802,7 @@ def _on_hold_changed(reason, old_reason):
             else:
                 _card_timer.stop()
         if in_review:
-            tooltip(HOLD_MESSAGES[reason], parent=mw)
+            tooltip(tr(HOLD_MESSAGES[reason]), parent=mw)
         return
     if not in_review:
         return
@@ -866,7 +874,7 @@ def _guarded_move_to_state(state, *args, **kwargs):
                 mw.col.decks.select(_locked_deck_id)
         except Exception:
             pass
-        tooltip("Locked in: finish this deck first", parent=mw)
+        tooltip(tr("locked_block"), parent=mw)
         return None
     return _orig_move_to_state(state, *args, **kwargs)
 
@@ -888,7 +896,7 @@ def on_state_change_lock(new_state, old_state):
         except Exception:
             _locked_deck_id = None
         if get_dialog().conf.get("lock_in_deck"):
-            tooltip("Locked in until this deck is done", parent=mw)
+            tooltip(tr("locked_start"), parent=mw)
 
 
 gui_hooks.state_did_change.append(on_state_change_lock)

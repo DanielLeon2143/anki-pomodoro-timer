@@ -18,5 +18,6 @@ These can also be changed live from the timer window (Tools > Pomodoro Timer).
 - `studying_seconds`: seconds added by the **Studying** button (shown once the answer is revealed, while the auto-answer countdown runs).
 - `lock_in_deck`: once you start studying, block going back to the Decks screen, the deck overview or switching decks (Esc, the Decks link, `/`) until the deck's due cards are finished. Closing Anki still works.
 - `extend_time_key`: keyboard shortcut that presses the **Tip of my tongue** / **Studying** button while reviewing (default `"H"`; leave empty to disable).
+- `language`: `"auto"` follows Anki's language, then the system language (falls back to English). Or set one of: `en`, `es`, `pt`, `fr`, `de`, `zh_CN`, `zh_TW`, `ja`, `ko`.
 - `focus_color`, `short_break_color`, `long_break_color`: progress bar / timer colour for each phase (hex, e.g. `"#e74c3c"`).
 - `show_bottom_bar`: show a progress bar along the bottom of Anki's main window (click it to open the timer).
