@@ -2,6 +2,8 @@
 
 An Anki add-on that adds a Pomodoro timer plus focus tools for reviewing.
 
+<img src="screenshots/timer-window.png" alt="Pomodoro Timer window" width="300"> <img src="screenshots/timer-window-chinese.png" alt="Pomodoro Timer window in Chinese" width="270">
+
 ## Features
 
 - **Pomodoro timer** (Tools > Pomodoro Timer, `Ctrl+Shift+P`): focus / short break / long break,
