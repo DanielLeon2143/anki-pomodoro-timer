@@ -1,0 +1,23 @@
+{
+    "work_minutes": 25,
+    "short_break_minutes": 5,
+    "long_break_minutes": 15,
+    "sessions_before_long_break": 4,
+    "auto_start_next": false,
+    "always_on_top": true,
+    "sound": true,
+    "show_bottom_bar": true,
+    "auto_start_on_review": true,
+    "auto_reveal": false,
+    "auto_reveal_seconds": 15,
+    "auto_action": false,
+    "auto_action_seconds": 10,
+    "auto_action_type": "again",
+    "tip_of_tongue_seconds": 5,
+    "studying_seconds": 10,
+    "lock_in_deck": false,
+    "extend_time_key": "H",
+    "focus_color": "#e74c3c",
+    "short_break_color": "#27ae60",
+    "long_break_color": "#2980b9"
+}
