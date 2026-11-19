@@ -155,6 +155,8 @@ class PomodoroDialog(QDialog):
         self.completed_work = 0
         self.running = False
         self.paused = False  # paused with the Pause button (not just stopped)
+        # "Continue without Pomodoro": card timers run while the Pomodoro stays paused.
+        self.continue_without = False
         self.remaining = self._phase_seconds(WORK)
         self._phase_total = self.remaining
 
@@ -424,7 +426,18 @@ class PomodoroDialog(QDialog):
             self.timer.start()
             self.running = True
             self.paused = False
+        self.continue_without = False
         self._refresh()
+
+    def resume(self):
+        if not self.running:
+            self.toggle()
+
+    def continue_without_pomodoro(self):
+        """Keep the Pomodoro paused but let auto-reveal / auto-answer run."""
+        if self.paused and not self.running:
+            self.continue_without = True
+            self._refresh()
 
     def start_for_review(self):
         """Called when the user starts studying a deck."""
@@ -438,6 +451,7 @@ class PomodoroDialog(QDialog):
         self.timer.start()
         self.running = True
         self.paused = False
+        self.continue_without = False
         self._refresh()
         tooltip(tr("started", phase=phase_label(self.phase)), parent=mw)
 
@@ -445,6 +459,7 @@ class PomodoroDialog(QDialog):
         self.timer.stop()
         self.running = False
         self.paused = False
+        self.continue_without = False
         self.remaining = self._phase_seconds(self.phase)
         self._phase_total = self.remaining
         self._refresh()
@@ -462,6 +477,7 @@ class PomodoroDialog(QDialog):
     def _advance(self, notify):
         finished = self.phase
         self.paused = False
+        self.continue_without = False
         if finished == WORK:
             self.completed_work += 1
             n = self.conf["sessions_before_long_break"]
@@ -510,7 +526,9 @@ class PomodoroDialog(QDialog):
             f"{dots}   " + tr("completed", n=self.completed_work)
         )
 
-        self.start_btn.setText(tr("pause") if self.running else tr("start"))
+        self.start_btn.setText(
+            tr("pause") if self.running else tr("resume") if self.paused else tr("start")
+        )
         title = f"{m:02d}:{s:02d} – {phase_label(self.phase)}" if self.running else tr("title")
         self.setWindowTitle(title)
 
@@ -535,11 +553,12 @@ class PomodoroDialog(QDialog):
         """Why auto-reveal / auto-answer are on hold, or None if they may run.
 
         "break"  - a short / long break is counting down.
-        "paused" - the timer was paused with the Pause button.
+        "paused" - the timer was paused with the Pause button (unless the user
+                   chose "Continue without Pomodoro").
         """
         if self.running:
             return "break" if self.phase != WORK else None
-        return "paused" if self.paused else None
+        return "paused" if self.paused and not self.continue_without else None
 
     def closeEvent(self, event):
         # Hide instead of destroying so the timer keeps running in the background.
@@ -612,7 +631,10 @@ _EXTEND_JS = r"""
       return td.querySelector("button") || td;
     }
     function place() {
-      var el = document.getElementById("pomo-extend");
+      placeEl(document.getElementById("pomo-extend"));
+      placeEl(document.getElementById("pomo-paused"));
+    }
+    function placeEl(el) {
       if (!el) return;
       var a = anchor();
       if (a) {
@@ -646,7 +668,6 @@ _EXTEND_JS = r"""
       el.appendChild(left);
       el.appendChild(btn);
       document.body.appendChild(el);
-      window.addEventListener("resize", place);
       return el;
     }
     function tick() {
@@ -654,6 +675,54 @@ _EXTEND_JS = r"""
       var secs = Math.max(0, Math.ceil((st.deadline - Date.now()) / 1000));
       if (left) left.textContent = st.prefix + " " + secs + "s";
     }
+    function pausedCell() {
+      var el = document.getElementById("pomo-paused");
+      if (el) return el;
+      if (!document.body) return null;
+      el = document.createElement("div");
+      el.id = "pomo-paused";
+      el.style.cssText =
+        "position:fixed;display:flex;flex-direction:column;" +
+        "align-items:center;white-space:nowrap;z-index:10;";
+      var label = document.createElement("span");
+      label.id = "pomo-paused-label";
+      label.className = "stattxt";
+      var row = document.createElement("div");
+      row.style.cssText = "display:flex;gap:6px;";
+      [["pomo-resume-btn", "pomo:resume"], ["pomo-continue-btn", "pomo:continue"]]
+        .forEach(function (b) {
+          var btn = document.createElement("button");
+          btn.id = b[0];
+          btn.style.margin = "0";
+          btn.addEventListener("click", function (e) {
+            e.preventDefault();
+            pycmd(b[1]);
+          });
+          row.appendChild(btn);
+        });
+      el.appendChild(label);
+      el.appendChild(row);
+      document.body.appendChild(el);
+      return el;
+    }
+    window.pomoPaused = {
+      show: function (label, resume, cont, contTitle) {
+        var el = pausedCell();
+        if (!el) return;
+        document.getElementById("pomo-paused-label").textContent = label;
+        document.getElementById("pomo-resume-btn").textContent = resume;
+        var c = document.getElementById("pomo-continue-btn");
+        c.textContent = cont;
+        c.title = contTitle;
+        el.style.display = "flex";
+        placeEl(el);
+      },
+      hide: function () {
+        var el = document.getElementById("pomo-paused");
+        if (el) el.style.display = "none";
+      },
+    };
+    window.addEventListener("resize", place);
     window.pomoExtend = {
       show: function (label, title, prefix, remainingMs) {
         var el = cell();
@@ -664,7 +733,7 @@ _EXTEND_JS = r"""
         st.prefix = prefix;
         st.deadline = Date.now() + remainingMs;
         el.style.display = "flex";
-        place();
+        placeEl(el);
         if (st.timer) clearInterval(st.timer);
         st.timer = setInterval(tick, 250);
         tick();
@@ -709,6 +778,18 @@ def _show_extend_button(side):
 
 def _hide_extend_button():
     _bottom_eval("window.pomoExtend.hide();")
+
+
+def _sync_paused_buttons():
+    """Show "Resume" / "Continue without Pomodoro" while the Pomodoro is paused."""
+    if get_dialog().hold_reason() == "paused":
+        args = ", ".join(
+            json.dumps(tr(k))
+            for k in ("paused_label", "resume", "continue_without", "continue_tooltip")
+        )
+        _bottom_eval(f"window.pomoPaused.show({args});")
+    else:
+        _bottom_eval("window.pomoPaused.hide();")
 
 
 def _stop_card_timer():
@@ -777,6 +858,7 @@ def on_show_question(card):
         _schedule(card, "question", conf["auto_reveal_seconds"])
     else:
         _stop_card_timer()
+    _sync_paused_buttons()
 
 
 def on_show_answer(card):
@@ -786,6 +868,7 @@ def on_show_answer(card):
         _schedule(card, "answer", conf["auto_action_seconds"])
     else:
         _stop_card_timer()
+    _sync_paused_buttons()
 
 
 HOLD_MESSAGES = {"break": "hold_break", "paused": "hold_paused"}
@@ -803,9 +886,12 @@ def _on_hold_changed(reason, old_reason):
                 _card_timer.stop()
         if in_review:
             tooltip(tr(HOLD_MESSAGES[reason]), parent=mw)
+            _sync_paused_buttons()
         return
     if not in_review:
         return
+    if old_reason == "paused" and get_dialog().paused:
+        tooltip(tr("continue_msg"), parent=mw)
     if r.state == "question":
         on_show_question(r.card)
     elif r.state == "answer":
@@ -815,6 +901,12 @@ def _on_hold_changed(reason, old_reason):
 def on_js_message(handled, message, context):
     if message == "pomo:extend":
         extend_card_timer()
+        return (True, None)
+    if message == "pomo:resume":
+        get_dialog().resume()
+        return (True, None)
+    if message == "pomo:continue":
+        get_dialog().continue_without_pomodoro()
         return (True, None)
     return handled
 

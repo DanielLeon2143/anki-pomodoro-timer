@@ -11,7 +11,7 @@ These can also be changed live from the timer window (Tools > Pomodoro Timer).
 - `sound`: beep when a phase ends.
 - `auto_start_on_review`: start (or resume) the timer whenever you begin studying a deck.
 - `auto_reveal`: automatically show the answer after `auto_reveal_seconds`.
-- While a short/long break is running, or the Pomodoro is paused, `auto_reveal` and `auto_action` are on hold; they restart when a focus session is running again.
+- While a short/long break is running, or the Pomodoro is paused, `auto_reveal` and `auto_action` are on hold; they restart when a focus session is running again. While paused, the review screen shows **Resume** and **Continue without Pomodoro** (keeps the Pomodoro paused but turns auto-reveal / auto-answer back on).
 - `auto_action`: once the answer is showing, automatically act on the card after `auto_action_seconds`.
 - `auto_action_type`: `"again"` (mark the card Again) or `"bury"` (bury it until tomorrow).
 - `tip_of_tongue_seconds`: seconds added by the **Tip of my tongue** button (shown in the review bottom bar while the auto-reveal countdown runs).
