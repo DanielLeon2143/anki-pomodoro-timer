@@ -624,6 +624,6 @@ def current_language():
     return _lang
 
 
-def tr(key, **kwargs):
-    text = STRINGS.get(_lang, {}).get(key) or STRINGS["en"].get(key, key)
+def tr(_key, /, **kwargs):
+    text = STRINGS.get(_lang, {}).get(_key) or STRINGS["en"].get(_key, _key)
     return text.format(**kwargs) if kwargs else text
