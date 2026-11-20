@@ -5,12 +5,15 @@ adjustable work / short break / long break durations.
 """
 
 import json
+import os
+import shutil
 
 from aqt import gui_hooks, mw
 from aqt.qt import (
     QAction,
     QDialog,
     QFont,
+    QFileDialog,
     QFormLayout,
     QHBoxLayout,
     QKeySequence,
@@ -43,6 +46,9 @@ DEFAULTS = {
     "auto_start_next": False,
     "always_on_top": True,
     "sound": True,
+    "focus_end_sound": "",
+    "break_end_sound": "",
+    "sound_volume": 100,
     "show_bottom_bar": True,
     "auto_start_on_review": True,
     "auto_reveal": False,
@@ -85,6 +91,68 @@ ANKI_KEYS = {
         "Ctrl+Alt+E", "Ctrl+Alt+I", "Ctrl+Alt+N",
     )
 }
+
+
+# Custom sounds are copied here; Anki keeps user_files when the add-on updates.
+USER_FILES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "user_files")
+SOUND_KEYS = (("focus_end_sound", "sound_focus_end"), ("break_end_sound", "sound_break_end"))
+SOUND_EXTS = "*.mp3 *.wav *.ogg *.m4a *.aac *.flac *.opus *.wma"
+
+_player = None
+_audio_out = None
+
+
+def _sound_path(name):
+    if not name:
+        return None
+    path = os.path.join(USER_FILES, os.path.basename(name))
+    return path if os.path.isfile(path) else None
+
+
+def _play_with_anki(path):
+    try:
+        from aqt.sound import av_player
+
+        av_player.play_file(path)
+    except Exception:
+        QApplication.beep()
+
+
+def play_sound(name, volume=100):
+    """Play a custom sound from user_files, or beep if none is set."""
+    path = _sound_path(name)
+    if not path:
+        QApplication.beep()
+        return
+    global _player, _audio_out
+    try:
+        from PyQt6.QtCore import QUrl
+        from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
+
+        if _player is None:
+            _player = QMediaPlayer(mw)
+            _audio_out = QAudioOutput(mw)
+            _player.setAudioOutput(_audio_out)
+            # Formats Qt can't decode go to Anki's own player (mpv) instead.
+            _player.errorOccurred.connect(
+                lambda *_: _play_with_anki(_player.source().toLocalFile())
+            )
+        _audio_out.setVolume(max(0, min(int(volume), 100)) / 100)
+        _player.stop()
+        _player.setSource(QUrl.fromLocalFile(path))
+        _player.play()
+    except Exception:
+        _play_with_anki(path)
+
+
+def import_sound(src):
+    """Copy a chosen file into user_files and return the stored name."""
+    os.makedirs(USER_FILES, exist_ok=True)
+    name = os.path.basename(src)
+    dst = os.path.join(USER_FILES, name)
+    if os.path.abspath(src) != os.path.abspath(dst):
+        shutil.copyfile(src, dst)
+    return name
 
 
 def get_config():
@@ -238,6 +306,35 @@ class PomodoroDialog(QDialog):
             form.addRow(cb)
             cb.toggled.connect(self._settings_changed)
 
+        # Custom sounds: one for the end of a focus session, one for the end of a break.
+        self.sound_labels = {}
+        self.sound_widgets = []
+        for key, label_key in SOUND_KEYS:
+            row = QHBoxLayout()
+            name = QLabel()
+            name.setMinimumWidth(90)
+            self.sound_labels[key] = name
+            choose = QPushButton(tr("sound_choose"))
+            choose.clicked.connect(lambda _=False, k=key: self._choose_sound(k))
+            test = QPushButton(tr("sound_test"))
+            test.clicked.connect(
+                lambda _=False, k=key: play_sound(self.conf[k], self.conf["sound_volume"])
+            )
+            clear = QPushButton(tr("sound_clear"))
+            clear.setToolTip(tr("sound_clear_tooltip"))
+            clear.clicked.connect(lambda _=False, k=key: self._set_sound(k, ""))
+            row.addWidget(name, 1)
+            for b in (choose, test, clear):
+                row.addWidget(b)
+            self.sound_widgets += [name, choose, test, clear]
+            form.addRow(tr(label_key), row)
+        self.volume_spin = self._spin(0, 100, self.conf["sound_volume"], "%")
+        self.volume_spin.setToolTip(tr("sound_volume_tooltip"))
+        self.volume_spin.valueChanged.connect(self._settings_changed)
+        self.sound_widgets.append(self.volume_spin)
+        form.addRow(tr("sound_volume"), self.volume_spin)
+        self._update_sound_labels()
+
         # Progress bar colours, one per phase.
         self.color_btns = {}
         for phase, key in COLOR_KEYS.items():
@@ -339,6 +436,36 @@ class PomodoroDialog(QDialog):
         self._refresh()
         tooltip(tr("lang_restart"), period=4000, parent=self)
 
+    def _choose_sound(self, key):
+        path, _ = QFileDialog.getOpenFileName(
+            self, tr("sound_pick_title"), "", f"{tr('sound_files')} ({SOUND_EXTS})"
+        )
+        if not path:
+            return
+        try:
+            name = import_sound(path)
+        except OSError as e:
+            tooltip(str(e), parent=self)
+            return
+        self._set_sound(key, name)
+        play_sound(name, self.conf["sound_volume"])
+
+    def _set_sound(self, key, name):
+        self.conf[key] = name
+        save_config(self.conf)
+        self._update_sound_labels()
+
+    def _update_sound_labels(self):
+        for key, label in self.sound_labels.items():
+            name = self.conf[key]
+            if name and _sound_path(name):
+                label.setText(name)
+            elif name:
+                label.setText(tr("sound_missing"))
+            else:
+                label.setText(tr("sound_default"))
+            label.setToolTip(name)
+
     def _pick_color(self, phase):
         key = COLOR_KEYS[phase]
         color = QColorDialog.getColor(
@@ -391,6 +518,7 @@ class PomodoroDialog(QDialog):
             auto_start_next=self.auto_cb.isChecked(),
             always_on_top=self.top_cb.isChecked(),
             sound=self.sound_cb.isChecked(),
+            sound_volume=self.volume_spin.value(),
             show_bottom_bar=self.bar_cb.isChecked(),
             auto_start_on_review=self.review_cb.isChecked(),
             auto_reveal=self.reveal_cb.isChecked(),
@@ -403,6 +531,8 @@ class PomodoroDialog(QDialog):
             lock_in_deck=self.lock_cb.isChecked(),
             extend_time_key=self.key_edit.keySequence().toString(),
         )
+        for w in self.sound_widgets:
+            w.setEnabled(self.conf["sound"])
         self.reveal_spin.setEnabled(self.conf["auto_reveal"])
         self.tip_spin.setEnabled(self.conf["auto_reveal"])
         self.action_spin.setEnabled(self.conf["auto_action"])
@@ -490,7 +620,8 @@ class PomodoroDialog(QDialog):
 
         if notify:
             if self.conf["sound"]:
-                QApplication.beep()
+                key = "focus_end_sound" if finished == WORK else "break_end_sound"
+                play_sound(self.conf[key], self.conf["sound_volume"])
             msg = tr("focus_done") if finished == WORK else tr("break_over")
             tooltip(msg, period=5000, parent=mw)
             self.raise_()

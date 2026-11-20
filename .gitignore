@@ -2,3 +2,4 @@ __pycache__/
 *.pyc
 meta.json
 *.ankiaddon
+user_files/

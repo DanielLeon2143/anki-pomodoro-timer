@@ -7,7 +7,7 @@ An Anki add-on that adds a Pomodoro timer plus focus tools for reviewing.
 ## Features
 
 - **Pomodoro timer** (Tools > Pomodoro Timer, `Ctrl+Shift+P`): focus / short break / long break,
-  adjustable lengths, optional auto-start, beep, and a progress bar along the bottom of Anki.
+  adjustable lengths, optional auto-start, a sound at the end of each phase (default beep or your own sound files, with volume), and a progress bar along the bottom of Anki.
   Starts automatically when you begin studying a deck (optional).
 - **Auto-reveal**: shows the answer after a set number of seconds.
 - **Auto-answer**: once the answer is showing, marks the card *Again* (or buries it) after a set time.

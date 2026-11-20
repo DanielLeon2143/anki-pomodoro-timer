@@ -8,7 +8,9 @@ These can also be changed live from the timer window (Tools > Pomodoro Timer).
 - `sessions_before_long_break`: number of focus sessions before a long break.
 - `auto_start_next`: automatically start the next phase when one ends.
 - `always_on_top`: keep the timer window above other windows.
-- `sound`: beep when a phase ends.
+- `sound`: play a sound when a phase ends.
+- `focus_end_sound`, `break_end_sound`: custom sound file for the end of a focus session / the end of a break (mp3, wav, ogg, m4a, flac...). Pick them with **Choose...** in the timer window; the file is copied into the add-on's `user_files` folder (kept across updates) and only its name is stored here. Empty = the default beep.
+- `sound_volume`: volume for custom sounds, 0-100.
 - `auto_start_on_review`: start (or resume) the timer whenever you begin studying a deck.
 - `auto_reveal`: automatically show the answer after `auto_reveal_seconds`.
 - While a short/long break is running, or the Pomodoro is paused, `auto_reveal` and `auto_action` are on hold; they restart when a focus session is running again. While paused, the review screen shows **Resume** and **Continue without Pomodoro** (keeps the Pomodoro paused but turns auto-reveal / auto-answer back on).
