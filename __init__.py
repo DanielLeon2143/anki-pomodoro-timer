@@ -28,6 +28,7 @@ from aqt.qt import (
     QComboBox,
     QTimer,
     QVBoxLayout,
+    QWidget,
     QGroupBox,
     Qt,
     QApplication,
@@ -45,12 +46,14 @@ DEFAULTS = {
     "sessions_before_long_break": 4,
     "auto_start_next": False,
     "always_on_top": True,
+    "pomodoro_enabled": True,
     "sound": True,
     "focus_end_sound": "",
     "break_end_sound": "",
     "sound_volume": 100,
     "show_bottom_bar": True,
     "auto_start_on_review": True,
+    "focus_options_enabled": True,
     "auto_reveal": False,
     "auto_reveal_seconds": 15,
     "auto_action": False,
@@ -234,13 +237,29 @@ class PomodoroDialog(QDialog):
 
         self._build_ui()
         self._settings_changed()
+        self._apply_enabled()
         self._apply_on_top()
         self._refresh()
 
     # ---------- UI ----------
 
     def _build_ui(self):
-        layout = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+
+        # Master switch: turns the whole Pomodoro off (Focus Options keep working).
+        self.enable_cb = QCheckBox(tr("pomo_enable"))
+        f = QFont()
+        f.setBold(True)
+        self.enable_cb.setFont(f)
+        self.enable_cb.setToolTip(tr("pomo_enable_tooltip"))
+        self.enable_cb.setChecked(self.conf["pomodoro_enabled"])
+        self.enable_cb.toggled.connect(self._enable_changed)
+        outer.addWidget(self.enable_cb)
+
+        self.timer_area = QWidget()
+        layout = QVBoxLayout(self.timer_area)
+        layout.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(self.timer_area)
 
         self.phase_label = QLabel()
         self.phase_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -253,7 +272,7 @@ class PomodoroDialog(QDialog):
         self.time_label = QLabel()
         self.time_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         f = QFont()
-        f.setPointSize(40)
+        f.setPointSize(26)
         f.setBold(True)
         self.time_label.setFont(f)
         layout.addWidget(self.time_label)
@@ -277,6 +296,7 @@ class PomodoroDialog(QDialog):
         for b in (self.start_btn, reset_btn, skip_btn):
             buttons.addWidget(b)
         layout.addLayout(buttons)
+        layout = outer
 
         # Settings
         box = QGroupBox(tr("settings"))
@@ -357,12 +377,25 @@ class PomodoroDialog(QDialog):
         self.lang_combo.setCurrentIndex(max(idx, 0))
         self.lang_combo.setToolTip(tr("lang_restart"))
         self.lang_combo.currentIndexChanged.connect(self._language_changed)
-        form.addRow(tr("language"), self.lang_combo)
-
+        self.pomo_box = box
         layout.addWidget(box)
 
+        lang_form = QFormLayout()
+        lang_form.addRow(tr("language"), self.lang_combo)
+        layout.addLayout(lang_form)
+
         # Focus Options
+        self.focus_enable_cb = QCheckBox(tr("focus_enable"))
+        f = QFont()
+        f.setBold(True)
+        self.focus_enable_cb.setFont(f)
+        self.focus_enable_cb.setToolTip(tr("focus_enable_tooltip"))
+        self.focus_enable_cb.setChecked(self.conf["focus_options_enabled"])
+        self.focus_enable_cb.toggled.connect(self._focus_enable_changed)
+        layout.addWidget(self.focus_enable_cb)
+
         focus_box = QGroupBox(tr("focus_options"))
+        self.focus_box = focus_box
         fform = QFormLayout(focus_box)
 
         self.reveal_cb = QCheckBox(tr("reveal_after"))
@@ -547,7 +580,38 @@ class PomodoroDialog(QDialog):
             self._phase_total = self.remaining
         self._refresh()
 
+    def enabled(self):
+        return bool(self.conf.get("pomodoro_enabled", True))
+
+    def _enable_changed(self, checked):
+        self.conf["pomodoro_enabled"] = bool(checked)
+        save_config(self.conf)
+        if not checked:
+            self.reset()
+        self._apply_enabled()
+        self._refresh()
+        tooltip(tr("pomo_on_msg" if checked else "pomo_off_msg"), parent=self)
+
+    def _apply_enabled(self):
+        on = self.enabled()
+        self.timer_area.setVisible(on)
+        self.pomo_box.setEnabled(on)
+        self.focus_box.setEnabled(self.focus_enabled())
+        self.adjustSize()
+
+    def focus_enabled(self):
+        return bool(self.conf.get("focus_options_enabled", True))
+
+    def _focus_enable_changed(self, checked):
+        self.conf["focus_options_enabled"] = bool(checked)
+        save_config(self.conf)
+        self._apply_enabled()
+        _refresh_card_timer()
+        tooltip(tr("focus_on_msg" if checked else "focus_off_msg"), parent=self)
+
     def toggle(self):
+        if not self.enabled():
+            return
         if self.running:
             self.timer.stop()
             self.running = False
@@ -571,7 +635,7 @@ class PomodoroDialog(QDialog):
 
     def start_for_review(self):
         """Called when the user starts studying a deck."""
-        if self.running or not self.conf["auto_start_on_review"]:
+        if self.running or not self.conf["auto_start_on_review"] or not self.enabled():
             return
         # A break that hasn't begun yet makes no sense while studying: go to focus.
         if self.phase != WORK and self.remaining == self._phase_total:
@@ -668,7 +732,7 @@ class PomodoroDialog(QDialog):
             self.remaining,
             self._phase_total,
             self.running,
-            self.conf["show_bottom_bar"],
+            self.conf["show_bottom_bar"] and self.enabled(),
             color,
         )
 
@@ -687,6 +751,8 @@ class PomodoroDialog(QDialog):
         "paused" - the timer was paused with the Pause button (unless the user
                    chose "Continue without Pomodoro").
         """
+        if not self.enabled():
+            return None
         if self.running:
             return "break" if self.phase != WORK else None
         return "paused" if self.paused and not self.continue_without else None
@@ -913,7 +979,8 @@ def _hide_extend_button():
 
 def _sync_paused_buttons():
     """Show "Resume" / "Continue without Pomodoro" while the Pomodoro is paused."""
-    if get_dialog().hold_reason() == "paused":
+    dialog = get_dialog()
+    if dialog.focus_enabled() and dialog.hold_reason() == "paused":
         args = ", ".join(
             json.dumps(tr(k))
             for k in ("paused_label", "resume", "continue_without", "continue_tooltip")
@@ -985,7 +1052,7 @@ _card_timer.timeout.connect(_on_card_timer)
 def on_show_question(card):
     dialog = get_dialog()
     conf = dialog.conf
-    if conf["auto_reveal"] and dialog.hold_reason() is None:
+    if conf["auto_reveal"] and dialog.focus_enabled() and dialog.hold_reason() is None:
         _schedule(card, "question", conf["auto_reveal_seconds"])
     else:
         _stop_card_timer()
@@ -995,11 +1062,22 @@ def on_show_question(card):
 def on_show_answer(card):
     dialog = get_dialog()
     conf = dialog.conf
-    if conf["auto_action"] and dialog.hold_reason() is None:
+    if conf["auto_action"] and dialog.focus_enabled() and dialog.hold_reason() is None:
         _schedule(card, "answer", conf["auto_action_seconds"])
     else:
         _stop_card_timer()
     _sync_paused_buttons()
+
+
+def _refresh_card_timer():
+    """Re-apply Focus Options to the card on screen (after they're turned on / off)."""
+    r = getattr(mw, "reviewer", None)
+    if mw.state != "review" or r is None or not getattr(r, "card", None):
+        return
+    if getattr(r, "state", None) == "answer":
+        on_show_answer(r.card)
+    else:
+        on_show_question(r.card)
 
 
 HOLD_MESSAGES = {"break": "hold_break", "paused": "hold_paused"}
@@ -1066,6 +1144,7 @@ def _lock_active():
         return False
     return (
         conf.get("lock_in_deck")
+        and conf.get("focus_options_enabled", True)
         and not _lock_bypass
         and mw.col is not None
         and mw.state == "review"
@@ -1118,7 +1197,8 @@ def on_state_change_lock(new_state, old_state):
             _locked_deck_id = _current_deck_id()
         except Exception:
             _locked_deck_id = None
-        if get_dialog().conf.get("lock_in_deck"):
+        conf = get_dialog().conf
+        if conf.get("lock_in_deck") and conf.get("focus_options_enabled", True):
             tooltip(tr("locked_start"), parent=mw)
 
 
@@ -1131,8 +1211,9 @@ gui_hooks.state_did_change.append(on_state_change_lock)
 def on_state_shortcuts(state, shortcuts):
     if state != "review":
         return
-    key = (get_dialog().conf.get("extend_time_key") or "").strip()
-    if key:
+    dialog = get_dialog()
+    key = (dialog.conf.get("extend_time_key") or "").strip()
+    if key and dialog.focus_enabled():
         shortcuts.append((key, extend_card_timer))
 
 

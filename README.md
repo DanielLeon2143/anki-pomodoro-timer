@@ -16,6 +16,8 @@ An Anki add-on that adds a Pomodoro timer plus focus tools for reviewing.
 - **Add-time hotkey** (default `H`) for whichever of those two buttons is showing.
 - **Lock me into the deck**: blocks going back to the Decks screen, the deck overview or
   switching decks until the deck's due cards are finished.
+- **Use the Pomodoro timer** switch at the top of the window: turn the timer off and keep only the focus tools.
+- **Use Focus Options** switch: turn all the focus tools off at once and keep only the timer.
 - Auto-reveal and auto-answer pause during breaks and while the Pomodoro is paused.
 - While paused, the review screen shows **Resume** and **Continue without Pomodoro**
   (keeps the Pomodoro paused but turns auto-reveal / auto-answer back on).

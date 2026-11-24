@@ -2,6 +2,7 @@
 
 These can also be changed live from the timer window (Tools > Pomodoro Timer).
 
+- `pomodoro_enabled`: the **Use the Pomodoro timer** switch at the top of the timer window. Off = the timer is stopped and hidden (no bottom bar, no auto-start, no break / pause holds). Focus Options keep working.
 - `work_minutes`: length of a focus session.
 - `short_break_minutes`: length of a short break.
 - `long_break_minutes`: length of a long break.
@@ -12,6 +13,7 @@ These can also be changed live from the timer window (Tools > Pomodoro Timer).
 - `focus_end_sound`, `break_end_sound`: custom sound file for the end of a focus session / the end of a break (mp3, wav, ogg, m4a, flac...). Pick them with **Choose...** in the timer window; the file is copied into the add-on's `user_files` folder (kept across updates) and only its name is stored here. Empty = the default beep.
 - `sound_volume`: volume for custom sounds, 0-100.
 - `auto_start_on_review`: start (or resume) the timer whenever you begin studying a deck.
+- `focus_options_enabled`: the **Use Focus Options** switch. Off = auto-reveal, auto-answer, the Tip of my tongue / Studying buttons, the hotkey and the deck lock all stop (their settings are kept).
 - `auto_reveal`: automatically show the answer after `auto_reveal_seconds`.
 - While a short/long break is running, or the Pomodoro is paused, `auto_reveal` and `auto_action` are on hold; they restart when a focus session is running again. While paused, the review screen shows **Resume** and **Continue without Pomodoro** (keeps the Pomodoro paused but turns auto-reveal / auto-answer back on).
 - `auto_action`: once the answer is showing, automatically act on the card after `auto_action_seconds`.
